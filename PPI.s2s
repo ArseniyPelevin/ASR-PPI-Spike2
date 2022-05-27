@@ -1,0 +1,453 @@
+
+'try to delete existing waves in memory
+PlayWaveDelete();
+
+var virtDataHandle%;
+var recDataHandle%;
+
+var whiteNoise%;
+var noisePer% := 60; 'seconds, period of pattern repetition
+var noiseVolume;
+var prePulseVolume;
+var pulseVolume;
+var ok%;
+
+var auto%;
+var noiseDb := 70;
+var noiseDur% := 10; 'minutes of white noise before experiment starts
+var prePulseDb := 80;
+var prePulseDur% := 50;
+var ISI% := 100;
+var pulseDb := 110;
+var pulseDur% := 50;
+var ITI := 10;         'sec
+var ITIvar% := 5;
+var numPrep% := 10;
+var numPulse% := 10;
+var numPair% := 10;
+var blockSeq$ := "RPD";
+
+var noiseAmp;
+var prePulseAmp;
+var pulseAmp;
+
+Settings%();
+
+ITI *= 1000;                               ' now in ms
+var ITIvarVal := ITI*ITIvar%/100.0;        ' ITI variation in ms
+ITI -= ITIvarVal;                          ' giving the room for ITIvar
+
+var bits%;
+if ITIvarVal <> 0 then
+    bits% := Round(Ln(ITIvarVal)/Ln(2));        ' 0 causes error in the logarithm
+else
+    bits% := 0;
+endif;
+
+
+'noiseDur% *= 60;        'convert mins to secs. Might be useful for testing
+var noiseLoop% := noiseDur%/noisePer%;
+var ITIloop% := ITI/(noisePer%*1000); 
+var varLoop% := ITIvarVal/(noisePer%*1000); 
+
+makeWaves();
+WriteSequence%();
+
+'create new file to hold data and make visible
+recDataHandle%:=FileNew(0);
+FrontView(recDataHandle%);
+
+DoToolbar();  
+
+func DoToolbar() 
+ToolbarClear();  
+  
+ToolbarSet(1, "Stop", Stop%);   
+ToolbarSet(2, "Pause", Pause%);   
+ToolbarSet(3, "Start", Start%); 
+
+ToolbarEnable(1,1);
+ToolbarEnable(2,1);
+ToolbarEnable(3,1);
+return Toolbar("Main toolbar", 2 + 128);
+end;
+
+
+'Get settings with dialog box
+func Settings%()  
+
+DlgCreate("Settings");  'Start new dialog
+DlgCheck(1,"Enable automatic mode");
+DlgInteger(2,"Background volume (50-115 dB)",50,115);
+DlgInteger(3,"Noise duration (min)",0,600);				'automatic mode parameter
+
+DlgInteger(4,"Prepulse volume (50-115 dB)",50,115,0,5);
+DlgInteger(5,"Prepulse duration (0-100 ms)",0,100,0,6);
+DlgInteger(6,"Number of prepulses",0,100,0,7);				'automatic mode parameter
+
+DlgInteger(7,"Pulse volume (50-115 dB)",50,115,0,9);
+DlgInteger(8,"Pulse duration (0-100 ms)",0,100,0,10);
+DlgInteger(9,"Number of pulses",0,100,0,11);				'automatic mode parameter
+
+DlgInteger(10,"Prepulse-pulse interval (ms)",0,1000,0,13);			'ISI - interstimulus interval
+DlgInteger(11,"Number of prepulse-pulse pairs",0,100,0,14);		'automatic mode parameter
+
+DlgReal(12,"Inter-trial interval (ITI) (1-30 s)",1,30,0,16);	'automatic mode parameter
+DlgInteger(13,"ITI variation (0-100%)",0,100,0,17);			'automatic mode parameter
+
+DlgString(14,"Sequence of blocks",10,"RPD",0,19);			'automatic mode parameter
+DlgText("R - pRepulse, P - Pulse, D - Double",0,20);
+
+DlgAllow(0x3ff, 0, Change%);
+
+DlgButton(0,"Cancel");
+DlgButton(1,"OK");
+ok% := DlgShow(auto%, noiseDb, noiseDur%, prePulseDb, prePulseDur%, numPrep%, pulseDb, pulseDur%, numPulse%, ISI%, numPair%, ITI, ITIvar%, blockSeq$);   
+'ok% is 0 if user cancels,  variables updated if not
+if ok% = 0 then 'if Cancel we don't enter sampling
+    halt;
+endif;
+
+return 1;
+end;
+
+func Change%(item%)
+var v%;
+docase
+  case ((item% = 1) or (item% = 0)) then '0 is initial setup
+    v% := DlgValue(1);        'get check box state
+    DlgEnable(v%, 3, 6, 9, 11, 12, 13, 14); 'enable automatic variables
+endcase;
+return 1;                     'Return 1 to keep dialog running
+end;
+
+'Start experiment
+func Start%()
+
+Resume%();               'Set pause status off...
+
+SampleStart();           'Start sampling...
+SampleKey("s");          'play background noise
+
+ToolbarEnable(1,1); 'stop
+ToolbarEnable(2,1); 'pause
+ToolbarEnable(3,0); 'start
+
+return 1;
+end;
+
+'Pause sampling
+func Pause%()
+ToolbarSet(2, "Resume", Resume%);
+SampleKey("h");
+return 1;
+end;
+
+'Resume after pause
+func Resume%()
+ToolbarSet(2, "Pause", Pause%);
+SampleKey("s");
+
+return 1;
+end;
+
+'Stop sampling...
+func Stop%()  
+
+SampleStop();         'Stop sampling...
+SampleKey("h");       'Stop the sequencer...
+
+ToolbarEnable(1,0); 'start
+ToolbarEnable(2,0); 'pause
+ToolbarEnable(3,1); 'stop
+
+return 0; 
+end;
+
+
+proc makeWaves()
+
+Var ExpN$;   'Virtual channel expression for background noize
+Var ExpR$;   'Virtual channel expression for prepulse
+Var ExpP$;   'Virtual channel expression for pulse
+
+Var DAC%:=0;    'DAC to use for output
+
+Var memN%;   'Memory channel for noise 
+Var memR%;   'Memory channel for prepulse
+Var memP%;   'Memory channel for pulse
+
+Var Err%;
+Var Noise[0];   'Array to hold generated random (noise) data
+Var pts%;
+
+'create new file, or else VirtalChan will complain that there is no time views
+virtDataHandle%:=FileNew(7,2,5,1,10);           ' upt = 5 us
+
+MemDeleteItem(memN%);
+MemDeleteItem(memR%);
+MemDeleteItem(memP%);
+ 
+memN%:=Memchan(1, 0, 0.00002);          	' 4 times larger than 'upt' argument of FileNew()
+memR%:=Memchan(1, 0, 0.00002);                                                       
+memP%:=Memchan(1, 0, 0.00002);
+
+noiseVolume := Db2Vol(noiseDb);		' Volume is in 0-100 range
+prePulseVolume := Db2Vol(prePulseDb);
+pulseVolume := Db2Vol(pulseDb);
+
+noiseAmp := 2*noiseVolume/100;		' Amp is in 0-2 range.
+prePulseAmp := 2*prePulseVolume/100;		' It reflects semi-amplitude of voltage in output in our lab
+pulseAmp := 2*pulseVolume/100;
+
+'generate noise sequence for background noise
+Resize Noise[noisePer%/Binsize(memN%)];    
+Rand(Noise[], 2*noiseAmp, -noiseAmp);
+Memsetitem(memN%, 0, 0, Noise[]); 
+
+const nMax% := 1000000;
+var wave[nMax%]; 'Real and integer wave, first time
+var n% := ChanData(memN%, wave, 0, MaxTime(memN%)); 
+
+'generate noise sequence for prepulse
+Resize Noise[prePulseDur%/Binsize(memR%)];    
+Rand(Noise[], 2*prePulseAmp, -prePulseAmp);
+Memsetitem(memR%, 0, 0, Noise[]); 
+
+'generate noise sequence for pulse
+Resize Noise[pulseDur%/Binsize(memP%)];    
+Rand(Noise[], 2*pulseAmp, -pulseAmp);
+Memsetitem(memP%, 0, 0, Noise[]); 
+
+'WindowVisible(1);
+var virtChanN:=VirtualChan(0,"",memN%);
+var virtChanR:=VirtualChan(0,"",memR%);
+var virtChanP:=VirtualChan(0,"",memP%);
+    
+ExpN$:=Print$("Ch(%d)", memN%); 'form envelope
+VirtualChan(virtChanN, "", 0, Binsize(memN%)); 'Set the sample rate to match memory channel. If higher resulting cublc splining means clipping on DAC
+VirtualChan(virtChanN, ExpN$);   'Write the expression
+ChanTitle$(virtChanN,"Noise");
+PlayWaveAdd("N", "Noise", DAC%, 0, noisePer%, virtChanN, 1); 'Add the waveform to the list
+
+ExpR$:=Print$("Ch(%d)", memR%); 'form envelope
+VirtualChan(virtChanR, "", 0, Binsize(memR%)); 'Set the sample rate to match memory channel. If higher resulting cublc splining means clipping on DAC
+VirtualChan(virtChanR, ExpR$);   'Write the expression
+ChanTitle$(virtChanN,"Prepulse");
+PlayWaveAdd("R", "Prepulse", DAC%, 0, prePulseDur%, virtChanR, 1); 'Add the waveform to the list
+
+ExpP$:=Print$("Ch(%d)", memP%); 'form envelope
+VirtualChan(virtChanP, "", 0, Binsize(memP%)); 'Set the sample rate to match memory channel. If higher resulting cublc splining means clipping on DAC
+VirtualChan(virtChanP, ExpP$);   'Write the expression
+ChanTitle$(virtChanP,"Pulse");
+PlayWaveAdd("P", "Pulse", DAC%, 0, pulseDur%, virtChanP, 1); 'Add the waveform to the list
+
+PrintLog(SampleHandle(0));
+'after data has been loaded, close the view with the virtual waveforms
+View(virtDataHandle%);
+FileClose(0,-1);
+
+return;
+end;
+
+func Db2Vol(db)     
+var vol := Pow(_e,(db-72.061)/9.7861);		'calibrated with sound level meter and MS Excel log approximation
+'var vol := 0;					' For calibration
+return vol;
+end;
+
+'Generates .pls file. Also uses functions below
+func WriteSequence%()
+var Seq%; 'Sequence file handle
+Var Err%; 'Error check
+Var Path$;
+Const Seq$:="PPI_Seq.pls";
+
+Path$:=View(App(3)).Filename$(1)+View(App(3)).Filename$(2); 'Path is the location of this script
+
+Seq%:=Filenew(2, 0);
+If seq% < 0 then
+    Message("Sequence file could not be produced. Halting");
+    Halt;
+endif
+
+View(Seq%);
+
+Print("                SET    1,1,0\n");
+Print("                VAR    V1\n"); 
+Print("                VAR    V2\n");
+Print("                VAR    V3\n");
+Print("                VAR    V4\n");
+Print("                VAR    V5\n");
+Print("                VAR    V6\n");
+
+Print("HH:    'h       WAVEST S\n");    
+Print("                HALT\n");
+
+WriteNoise();
+
+if auto% then    
+    
+    var a%;
+    for a% := 0 to len(blockSeq$) do
+        docase
+            case Left$(blockSeq$, 1) = "R" then
+                Print("                MOVI V2, %d\n",numPrep%);
+                Print("                CALL RL\n"); 
+            case Left$(blockSeq$, 1) = "P" then
+                Print("                MOVI V3, %d\n",numPulse%);
+                Print("                CALL PL\n");
+            case Left$(blockSeq$, 1) = "D" then
+                Print("                MOVI V4, %d\n",numPair%);
+                Print("                CALL DL\n");
+        endcase;
+        blockSeq$ := DelStr$(blockSeq$, 1, 1);
+    next;
+    Print("                JUMP HH\n");
+    WriteITI();
+    
+else
+    Print("PP:  'r         CALL RL\n");    
+    Print("                JUMP ST\n");
+    Print("PU:  'p         CALL PL\n");    
+    Print("                JUMP ST\n");
+    Print("PA:  'd         CALL DL\n");    
+    Print("                JUMP ST\n");
+endif;    
+
+    WritePrepulses();
+    WritePulses();
+    WriteDoubles();
+    
+Err%:=FileSaveAs(Path$+Seq$, 2, 1);
+FileClose(0);
+Err%:=SampleSequencer(Path$+Seq$);
+
+If err% < 0 then
+    Message("Sequencer failed to load. Halting");
+    Halt
+endif
+
+return 1
+end
+
+proc WriteNoise()
+
+'play background white noise
+Print("ST:    's       MOVI V1, %d\n",noiseLoop%);
+
+if noiseLoop% <> 0 then
+    Print("NL:             WAVEGO N,TW\n");
+    Print("                WAVEST T\n"); 'start noise
+    Print("                DELAY s(%d)\n",noisePer%);
+    Print("                WAVEST S\n");
+    Print("                DBNZ V1, NL\n"); 'play as many noise periods as fit in noiseDur
+endif;
+
+if noiseDur% mod noisePer% <> 0 then
+    Print("                WAVEGO N,TW\n");
+    Print("                WAVEST T\n");
+    Print("                DELAY s(%d)\n",noiseDur% mod noisePer%); 'play the remaining ITI time (in case there are no whole number of noise periods in one ITI)
+    Print("                WAVEST S\n");
+endif;
+
+if not auto% then
+    Print("                JUMP ST\n");
+endif;
+
+return;
+end;
+
+proc WritePrepulses()
+
+'prepulse
+Print("RL:             WAVEGO R,TW\n");
+Print("                WAVEST T\n"); 'start prepulse
+Print("                DELAY ms(%d)\n",PrePulseDur%);
+Print("                WAVEST S\n"); 'stop prepulse
+
+if auto% then
+    Print("                CALL IT\n");
+    Print("                DBNZ V2,RL\n");
+endif;
+Print("                RETURN\n");
+
+return;
+end;
+
+proc WritePulses()
+
+'pulse
+Print("PL:             WAVEGO P,TW\n");      'set pulse waveform
+Print("                WAVEST T\n");         'start pulse
+Print("                DELAY ms(%d)\n",pulseDur%);
+Print("                WAVEST S\n");         'stop pulse
+
+if auto% then
+    Print("                CALL IT\n");
+    Print("                DBNZ V3,PL\n");
+endif;
+Print("                RETURN\n"); 
+
+
+return;
+end;
+
+proc WriteDoubles()
+
+'pair prepulse-pulse
+    'run prepulse
+Print("DL:             WAVEGO R,TW\n");
+Print("                WAVEST T\n"); 'start prepulse
+Print("                DELAY ms(%d)\n",PrePulseDur%);
+    'run background noise during ISI
+Print("                WAVEGO N,TW\n");
+Print("                WAVEST T\n"); 'start noise
+Print("                DELAY ms(%d)\n",ISI%);
+    'run pulse
+Print("                WAVEGO P, TW\n"); 'set pulse waveform
+Print("                WAVEST T\n"); 'start pulse
+Print("                DELAY ms(%d)\n",pulseDur%);
+Print("                WAVEST S\n");         'stop pulse
+
+if auto% then
+    Print("                CALL IT\n");
+    Print("                DBNZ V4,DL\n");
+endif;    
+Print("                RETURN\n");
+
+
+return;
+end;
+
+proc WriteITI()
+
+'ITI
+Print("IT:             MOVI V5, %d\n",ITIloop%);
+if ITIloop% <> 0 then
+    Print("TL:             WAVEGO N,TW\n");
+    Print("                WAVEST T\n");        'start noise
+    Print("                DELAY s(%d)\n",noisePer%);
+    Print("                WAVEST S\n");
+    Print("                DBNZ V5, TL\n");     'play as many noise periods as fit in ITI
+endif;
+
+if ITI mod (noisePer%*1000) <> 0 then
+    Print("                WAVEGO N,TW\n");
+    Print("                WAVEST T\n");
+    Print("                DELAY ms(%d)\n",ITI mod (noisePer%*1000)); 'play the remaining ITI time (in case there are no whole number of noise periods in one ITI)
+    Print("                WAVEST S\n");
+endif;
+
+if bits% <> 0 then
+    Print("                MOVRND V6,%d,-%d\n", bits%+1, bits%);
+    Print("                WAVEGO N,TW\n");
+    Print("                WAVEST T\n");        ' start noise
+    Print("                DELAY V6\n");        ' ASSUMING msPerStep OF SET =1 (ms). IT WILL GO WRONG OTHERWISE 
+    Print("                WAVEST S\n");
+endif;
+
+Print("                RETURN\n");
+
+return;
+end;
