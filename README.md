@@ -1,4 +1,4 @@
-# Prepulse inhibition procedure
+# Prepulse Inhibition (PPI) Protocol for Spike2-Based Data Acquisition Interface
 
 # Discription
 
