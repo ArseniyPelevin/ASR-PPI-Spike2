@@ -1,4 +1,4 @@
-# Spike-2 Based Setup for Acoustic Startle Response (ASR) and Prepulse Inhibition (PPI) Protocols
+# Spike2-Based Setup for Acoustic Startle Response (ASR) and Prepulse Inhibition (PPI) Protocols
 
 # Discription
 
