@@ -1,4 +1,4 @@
-# Prepulse Inhibition (PPI) Protocol for Spike2-Based Data Acquisition Interface
+# Spike-2 Based Setup for Acoustic Startle Response (ASR) and Prepulse Inhibition (PPI) Protocols
 
 # Discription
 
