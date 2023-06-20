@@ -1,8 +1,7 @@
 
 'Path to the file with default settings:
-var defaultSettings$ := "";
-'"C:/Users/User/Desktop/PPI/Saved_settings/Default_settings.txt";
-'Settings file can be generated in the "Settings" dialog, "Save settings" button
+var defaultSettings$ := 
+"C:/Users/Anna/Desktop/PPI/PPI_script/PPI - my script/SavedSettings/Default settings.txt";
 var currentSettingsFile$ := "";
 
 'Set variables for Settings dialog
@@ -97,25 +96,25 @@ DlgCheck(1, "Enable automatic program", 0, 2);
 
 'Limitations on sound volume (50-115 dB) are specific for hardware
 'They can be changed according to sound level calibration
-DlgInteger(2, "Background volume (50-115 dB)", 50, 115, 0, 3);
+DlgInteger(2, "Background volume (50–115 dB)", 50, 115, 0, 3);
 DlgInteger(3, "Noise duration (min)", 0, 600, 0, 4);
 
-DlgInteger(4, "Prepulse volume (50-115 dB)", 50, 115, 0, 6);
-DlgInteger(5, "Prepulse duration (0-100 ms)", 0, 100, 0, 7);
+DlgInteger(4, "Prepulse volume (50–115 dB)", 50, 115, 0, 6);
+DlgInteger(5, "Prepulse duration (0–100 ms)", 0, 100, 0, 7);
 DlgInteger(6, "Number of prepulses", 0, 100, 0, 8);
 
-DlgInteger(7, "Pulse volume (50-115 dB)", 50, 115, 0, 10);
-DlgInteger(8, "Pulse duration (0-100 ms)", 0, 100, 0, 11);
+DlgInteger(7, "Pulse volume (50–115 dB)", 50, 115, 0, 10);
+DlgInteger(8, "Pulse duration (0–100 ms)", 0, 100, 0, 11);
 DlgInteger(9, "Number of pulses", 0, 100, 0, 12);
 
 DlgInteger(10, "Prepulse-pulse interval (ISI) (ms)", 0, 1000, 0, 14);
 DlgInteger(11, "Number of prepulse-pulse pairs", 0, 100, 0, 15);
 
 DlgInteger(12, "Inter-trial interval (ITI) (s)", 1, 3600, 0, 17);
-DlgInteger(13, "ITI variation (0-100%)", 0, 100, 0, 18);
+DlgInteger(13, "ITI variation (0–100%)", 0, 100, 0, 18);
 
 DlgString(14, "Sequence of blocks", 20, "RPD", 0, 20);
-DlgText("R - pRepulse, P - Pulse, D - Double", 0, 21);
+DlgText("R — pRepulse, P — Pulse, D — Double", 0, 21);
 
 DlgButton(1, "OK");
 DlgButton(2, "Save settings", SaveSettings%);
