@@ -41,23 +41,15 @@ var info% := 0;
 info% := Settings%();
 
 var ITI := ITIset * 1000;               'Convert seconds of ITI into ms
-var ITIvarVal := ITI * ITIvar% / 100.0; 'Amplitude of ITI variation in ms
+var ITIvarVal := ITI * ITIvar% / 100.0; 'Amplitude of ITI variation, ms
 ITI -= ITIvarVal;                       'Give room for ITIvar
 ITIvarVal *= 2;                         'Double amplitude for neg and pos variation
 
-'Sequencer instruction MOVRND generates numbers in the range Pow(2,bits)-1
-'Express absolute time of ITI variation as a binary logarithm
-var bits%;
-if ITIvarVal <> 0 then
-    bits% := Round(Ln(ITIvarVal)/Ln(2));    '0 causes error in the logarithm
-else
-    bits% := 0;
-endif;
-
-var noiseDur% := noiseDurSet% * 60;       'Convert mins to secs
-var noisePer% := 60;                      'Period of noise pattern repetition in seconds
-var noiseLoop% := noiseDur% / noisePer%;  'Num of noise pattern repetitions in noiseDur
-var ITIloop% := ITI / (noisePer% * 1000); 'Num of noise pattern repetitions in ITI
+var noiseDur% := noiseDurSet% * 60;             'Convert mins to secs
+var noisePer% := 60;                            'Period of noise pattern repetition, s
+var noiseLoop% := noiseDur% / noisePer%;        'Num of noise periods in noiseDur
+var ITIloop% := ITI / (noisePer% * 1000);       'Num of noise periods in ITI
+var varLoop% := ITIvarVal / (noisePer% * 1000); 'Num of noise periods in ITI variation
 
 'Delete existing waves in memory
 PlayWaveDelete();
@@ -97,6 +89,9 @@ func Settings%()
 DlgCreate("Settings");  'Start new dialog
 
 DlgCheck(1, "Enable automatic program", 0, 2);
+
+'Limitations on sound volume (50-115 dB) are specific for hardware
+'They can be changed according to sound level calibration
 DlgInteger(2, "Background volume (50-115 dB)", 50, 115, 0, 3);
 DlgInteger(3, "Noise duration (min)", 0, 600, 0, 4);
 
@@ -111,7 +106,7 @@ DlgInteger(9, "Number of pulses", 0, 100, 0, 12);
 DlgInteger(10, "Prepulse-pulse interval (ISI) (ms)", 0, 1000, 0, 14);
 DlgInteger(11, "Number of prepulse-pulse pairs", 0, 100, 0, 15);
 
-DlgReal(12, "Inter-trial interval (ITI) (1-30 s)", 1, 30, 0, 17);
+DlgInteger(12, "Inter-trial interval (ITI) (s)", 1, 3600, 0, 17);
 DlgInteger(13, "ITI variation (0-100%)", 0, 100, 0, 18);
 
 DlgString(14, "Sequence of blocks", 20, "RPD", 0, 20);
@@ -345,7 +340,7 @@ end;
 
 
 'Convert sound volume in decibels into voltage amplitude
-func Db2Amp(db)    
+func Db2Amp(db)  
 
 '   db - sound level in decibels set by user
 '   volume - percent of the maximal output voltage amplitude on the given apparatus
@@ -408,13 +403,17 @@ endif
 
 View(Seq%);
 
-Print("                SET    1,1,0\n");'msPerStep, DACscale, DACoffset 
+var msPerStep := 1;
+Print("                SET    %f,1,0\n", msPerStep); 'msPerStep, DACscale, DACoffset 
 Print("                VAR    V1\n");   'Loop counter, noise periods in starting noise
 Print("                VAR    V2\n");   'Loop counter, number of prepulses
 Print("                VAR    V3\n");   'Loop counter, number of pulses
 Print("                VAR    V4\n");   'Loop counter, number of paired pulses
 Print("                VAR    V5\n");   'Loop counter, noise periods in ITI
 Print("                VAR    V6\n");   'Random variation of ITI
+Print("                VAR    V7\n");   'Noise period, ms
+Print("                VAR    V8\n");   'Loop counter, noise periods in ITI variation
+Print("                VAR    V9\n");   'V6 mod V7, remaining time of ITI variation
 
 Print("HH:    'h       WAVEST S\n");    'Set 'h' key for halt, stop the output
 Print("                HALT\n");        'Stop the sequence
@@ -449,7 +448,7 @@ if auto% then
         blockSeqLoop$ := DelStr$(blockSeqLoop$, 1, 1);  'Delete the leftmost character
     next;
     Print("                JUMP HH\n"); 'Halt
-    WriteITI();
+    WriteITI(msPerStep);
     
 'For manual control of stimuli's presentation
 else
@@ -573,7 +572,7 @@ return;
 end;
 
 
-proc WriteITI()
+proc WriteITI(msPerStep)
 
 'Assign variable as a loop counter
 Print("IT:             MOVI V5, %d\n", ITIloop%);
@@ -595,16 +594,62 @@ if ITI mod (noisePer% * 1000) <> 0 then
     Print("                WAVEST S\n");
 endif;
 
-'Play ITI variation (ITI +- ITIvar*ITI)
-if bits% <> 0 then
-    Print("                MOVRND V6,%d\n", bits%); 'Rand num in range Pow(2,bits)-1
-    Print("                WAVEGO N,TW\n");         'Set noise waveform
-    Print("                WAVEST T\n");            'Start noise
-    Print("                DELAY V6\n");            'Assume msPerStep of SET = 1 (ms)!
-    Print("                WAVEST S\n");            'Stop noise
+'Sequencer instruction MOVRND generates numbers in the range Pow(2,bits)-1
+'Express absolute time of ITI variation as a binary logarithm
+'Divide ITIvarVal by msPerStep of sequencer's SET directive to match DAC clock ticks
+var bits%;
+if ITIvarVal > 1 then  '0 causes error in the logarithm
+    bits% := Round(Ln(ITIvarVal/msPerStep)/Ln(2));   
+    WriteITIvariation(bits%);    
+else
+    Print("                RETURN\n");
 endif;
 
-Print("                RETURN\n");
+return;
+end;
+
+
+proc WriteITIvariation(bits%)
+
+Print("                MOVRND V6,%d\n", bits%); 'V6 = random num in range Pow(2,bits)-1
+Print("                BGT V6, ms(%d), TRIMVAR\n", ITIvarVal); 'if V6>ITIvarVal: TRIMVAR
+Print("CONTVAR:        MOVI V7, ms(%d)\n", noisePer% * 1000); 'V7 := noisePer, ms
+Print("                BLT V6, V7, NORMVAR\n"); 'if V6 < V7: output V6 without loop
+
+'Prepare variables for loop
+Print("                MOV V8, v6\n"); 'V8 := V6 (full variation)
+Print("                DIV V8, v7\n"); 'V8 /= V7 (whole num of noise periods in var)
+Print("                NEG V9, v8\n"); 'V9 := -V8
+Print("                MUL V9, V7\n"); 'V9 *= V7
+Print("                ADD V9, V6\n"); 'V9 += V6 (V9=V6 mod V7 - remaining time of var)
+
+'Play as many noise periods as fit in ITIvarVal
+Print("VARLOOP:        WAVEGO N,TW\n");     'Set noise waveform
+Print("                WAVEST T\n");        'Start noise
+Print("                DELAY V7\n");        'Play noise for one noise period
+Print("                WAVEST S\n");        'Stop noise
+Print("                DBNZ V8, VARLOOP\n");'Go to the start of the loop
+
+'Check if there is any time of variation remained
+Print("                BEQ V9, 0, RET\n");  'if V9=0: RETURN
+
+'Play the remaining time of var, if there is no whole number of noise periods in it
+Print("                WAVEGO N,TW\n");     'Set noise waveform
+Print("                WAVEST T\n");        'Start noise
+Print("                DELAY V9\n");        'Play the remainder of noise    
+Print("                WAVEST S\n");        'Stop noise
+Print("                JUMP RET\n");        'RETURN
+
+'Output var in one step without loop
+Print("NORMVAR:        WAVEGO N,TW\n");     'Set noise waveform
+Print("                WAVEST T\n");        'Start noise
+Print("                DELAY V6\n");        'Play full time of variation    
+Print("                WAVEST S\n");        'Stop noise
+
+Print("RET:            RETURN\n");
+
+'V6 is a power of 2, if it is bigger than the max variation needed, V6:=ITIvarVal
+Print("TRIMVAR:        MOVI V6, ms(%d), CONTVAR\n", ITIvarVal);
 
 return;
 end;
