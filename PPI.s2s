@@ -12,15 +12,17 @@ var prePulseVolume;
 var pulseVolume;
 var ok%;
 
-var auto%;
+var auto% := 0;
 var noiseDb := 70;
-var noiseDur% := 10; 'Minutes of white noise before experiment starts
+var noiseDurSet% := 10; 'Minutes of white noise before experiment starts
+' !!! var noiseDur% := 10; 'Minutes of white noise before experiment starts
 var prePulseDb := 80;
 var prePulseDur% := 50;
 var ISI% := 100;
 var pulseDb := 110;
 var pulseDur% := 50;
-var ITI := 10;         'Sec
+var ITIset := 10;         'Sec
+' !!! var ITI := 10;         'Sec
 var ITIvar% := 5;
 var numPrep% := 10;
 var numPulse% := 10;
@@ -33,7 +35,8 @@ var pulseAmp;
 
 Settings%();
 
-ITI *= 1000;                               'Convert seconds of ITI into ms
+var ITI := ITIset * 1000;                               'Convert seconds of ITI into ms
+' !!! ITI *= 1000;                               'Convert seconds of ITI into ms
 var ITIvarVal := ITI*ITIvar%/100.0;        'ITI variation in ms
 ITI -= ITIvarVal;                          'Give room for ITIvar
 
@@ -45,7 +48,8 @@ else
 endif;
 
 
-noiseDur% *= 60;        'Convert mins to secs
+var noiseDur% := noiseDurSet% * 60;        'Convert mins to secs
+' !!! noiseDur% *= 60;        'Convert mins to secs
 var noiseLoop% := noiseDur%/noisePer%;
 var ITIloop% := ITI/(noisePer%*1000); 
 var varLoop% := ITIvarVal/(noisePer%*1000); 
@@ -53,8 +57,8 @@ var varLoop% := ITIvarVal/(noisePer%*1000);
 makeWaves();
 WriteSequence%();
 
-'Create new file to hold data and make visible
-recDataHandle%:=FileNew(0);
+'Create new file for data 
+recDataHandle% := FileNew(0);
 FrontView(recDataHandle%);
 
 DoToolbar();  
@@ -64,9 +68,11 @@ ToolbarClear();
   
 ToolbarSet(1, "Stop", Stop%);     
 ToolbarSet(2, "Start", Start%); 
+ToolBarSet(3, "Settings", Settings%);
 
 ToolbarEnable(1,1);
 ToolbarEnable(2,1);
+ToolbarEnable(3,1);
 return Toolbar("Experiment control", 2 + 128);
 end;
 
@@ -75,32 +81,40 @@ end;
 func Settings%()  
 
 DlgCreate("Settings");  'Start new dialog
-DlgCheck(1,"Enable autimatic program");
-DlgInteger(2,"Background volume (50-115 dB)",50,115);
-DlgInteger(3,"Noise duration (min)",0,600);
 
-DlgInteger(4,"Prepulse volume (50-115 dB)",50,115,0,5);
-DlgInteger(5,"Prepulse duration (0-100 ms)",0,100,0,6);
-DlgInteger(6,"Number of prepulses",0,100,0,7);
+DlgButton(2,"Load settings",LoadSettings%,2,1);
+DlgCheck(1,"Enable automatic program",0,2);
+DlgInteger(2,"Background volume (50-115 dB)",50,115,0,3);
+DlgInteger(3,"Noise duration (min)",0,600,0,4);
 
-DlgInteger(7,"Pulse volume (50-115 dB)",50,115,0,9);
-DlgInteger(8,"Pulse duration (0-100 ms)",0,100,0,10);
-DlgInteger(9,"Number of pulses",0,100,0,11);
+DlgInteger(4,"Prepulse volume (50-115 dB)",50,115,0,6);
+DlgInteger(5,"Prepulse duration (0-100 ms)",0,100,0,7);
+DlgInteger(6,"Number of prepulses",0,100,0,8);
 
-DlgInteger(10,"Prepulse-pulse interval (ISI) (ms)",0,1000,0,13);
-DlgInteger(11,"Number of prepulse-pulse pairs",0,100,0,14);
+DlgInteger(7,"Pulse volume (50-115 dB)",50,115,0,10);
+DlgInteger(8,"Pulse duration (0-100 ms)",0,100,0,11);
+DlgInteger(9,"Number of pulses",0,100,0,12);
 
-DlgReal(12,"Inter-trial interval (ITI) (1-30 s)",1,30,0,16);
-DlgInteger(13,"ITI variation (0-100%)",0,100,0,17);
+DlgInteger(10,"Prepulse-pulse interval (ISI) (ms)",0,1000,0,14);
+DlgInteger(11,"Number of prepulse-pulse pairs",0,100,0,15);
 
-DlgString(14,"Sequence of blocks",10,"RPD",0,19);
-DlgText("R - pRepulse, P - Pulse, D - Double",0,20);
+DlgReal(12,"Inter-trial interval (ITI) (1-30 s)",1,30,0,17);
+DlgInteger(13,"ITI variation (0-100%)",0,100,0,18);
 
-DlgAllow(0x3ff, 0, Change%);
+DlgString(14,"Sequence of blocks",10,"RPD",0,20);
+DlgText("R - pRepulse, P - Pulse, D - Double",0,21);
 
+DlgButton(3,"Save settings", SaveSettings%);
 DlgButton(0,"Cancel");
 DlgButton(1,"OK");
-ok% := DlgShow(auto%, noiseDb, noiseDur%, prePulseDb, prePulseDur%, numPrep%, pulseDb, pulseDur%, numPulse%, ISI%, numPair%, ITI, ITIvar%, blockSeq$);   
+
+'Enable/disable dialogue items for automatic program 
+DlgAllow(0x3ff, 0, Change%);
+
+ok% := DlgShow(auto%, noiseDb, noiseDurSet%, prePulseDb, prePulseDur%, numPrep%, 
+pulseDb, pulseDur%, numPulse%, ISI%, numPair%, ITIset, ITIvar%, blockSeq$); 
+' !!! ok% := DlgShow(auto%, noiseDb, noiseDur%, prePulseDb, prePulseDur%, numPrep%, 
+' !!! pulseDb, pulseDur%, numPulse%, ISI%, numPair%, ITI, ITIvar%, blockSeq$); 
 'ok% is 0 if user cancels, variables updated if not
 if ok% = 0 then 'If Cancel don't enter sampling
     halt;
@@ -109,15 +123,56 @@ endif;
 return 1;
 end;
 
-'Automatic/manual Settings dialogue box
+
+'Automatic/manual settings dialogue box
 func Change%(item%)
 var v%;
 docase
-  case ((item% = 1) or (item% = 0)) then '0 is initial setup
-    v% := DlgValue(1);        'Get check box state
-    DlgEnable(v%, 3, 6, 9, 11, 12, 13, 14); 'Enable automatic variables
-endcase;
+    case ((item% = 1) or (item% = 0)) then '0 is initial setup
+        v% := DlgValue(1);        'Get check box state
+        DlgEnable(v%, 3, 6, 9, 11, 12, 13, 14); 'Enable automatic variables
+endcase; 
 return 1;                     'Return 1 to keep dialog running
+end;
+
+func LoadSettings%()
+FileOpen("",8,0);
+
+'Read settings from chosen file
+var n% := Read(auto%, noiseDb, noiseDurSet%, prePulseDb, prePulseDur%, ISI%, pulseDb, pulseDur%,
+ITIset, ITIvar%, numPrep%, numPulse%, numPair%, blockSeq$);
+' !!! var n% := Read(auto%, noiseDb, noiseDur%, prePulseDb, prePulseDur%, ISI%, pulseDb, pulseDur%,
+' !!! ITI, ITIvar%, numPrep%, numPulse%, numPair%, blockSeq$);
+
+'Update all dialogue values with settings from file
+DlgValue(1,auto%); DlgValue(2,noiseDb); DlgValue(3,noiseDurSet%); DlgValue(4,prePulseDb);
+' !!! DlgValue(1,auto%); DlgValue(2,noiseDb); DlgValue(3,noiseDur%); DlgValue(4,prePulseDb);
+DlgValue(5,prePulseDur%); DlgValue(6,ISI%); DlgValue(7,pulseDb); DlgValue(8,pulseDur%);
+DlgValue(9,ITIset); DlgValue(10,ITIvar%); DlgValue(11,numPrep%); DlgValue(12,numPulse%); 
+' !!! DlgValue(9,ITI); DlgValue(10,ITIvar%); DlgValue(11,numPrep%); DlgValue(12,numPulse%); 
+DlgValue(13,numPair%); DlgValue$(14,blockSeq$);
+
+'Toggle "Enable automatic program" checkbox
+Change%(1);
+
+FileClose();  
+return 1;
+end;
+
+func SaveSettings%() 
+FileNew(1);
+
+'Print current dialogue values into new file
+var i%;
+for i% := 1 to 13 do
+    Print("%f,", DlgValue(i%));
+next;
+Print("%s", DlgValue$(14));
+
+'Prompt user to save the file with settings
+FileSaveAs("");
+FileClose();
+return 1;
 end;
 
 'Start experiment
@@ -157,7 +212,6 @@ SampleKey("h");       'Stop the sequencer
 
 return 0; 
 end;
-
 
 proc makeWaves()
 
@@ -280,16 +334,16 @@ end;
 
 func WriteSequence%()
 var Seq%; 'Sequence file handle
-Var Err%; 'Error check
-Var Path$;
-Const Seq$:="PPI_Seq.pls";
+var Err%; 'Error check
+var Path$;
+Const Seq$ := "PPI_Seq.pls";
 
-Path$:=View(App(3)).Filename$(1)+View(App(3)).Filename$(2); 'Path is the location of this script
+Path$ := View(App(3)).Filename$(1)+View(App(3)).Filename$(2); 'Path is the location of this script
 
-Seq%:=Filenew(2, 0);
+Seq% := Filenew(2, 0);
 If seq% < 0 then
     Message("Sequence file could not be produced. Halting");
-    Halt;
+    halt;
 endif
 
 View(Seq%);
