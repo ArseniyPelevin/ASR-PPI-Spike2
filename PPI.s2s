@@ -1,20 +1,12 @@
 
 'Path to the file with default settings:
-var defaultSettings$ :=
-"C:/Users/Anna/Desktop/PPI/PPI_script/PPI - my script/SavedSettings/Default settings.txt";
+var defaultSettings$ := "";
+'"C:/Users/User/Desktop/PPI/Saved_settings/Default_settings.txt";
+'Settings file can be generated in the "Settings" dialog, "Save settings" button
 var currentSettingsFile$ := "";
 
-var virtDataHandle%;
-var recDataHandle%;
-
-var noiseVolume;
-var prePulseVolume;
-var pulseVolume;
-var noiseAmp;
-var prePulseAmp;
-var pulseAmp;
-
-'These values are just an example before the default settings are set.
+'Set variables for Settings dialog
+'These values are just an example untill default settings are set.
 'They will be overridden by the values from the file with default settings.
 var auto% := 0;         'Automatic experiment procedure
 var noiseDb := 70;      'Sound volume of background noise, db
@@ -38,34 +30,47 @@ endif;
 
 'If info% = 1 Settings dialog can be opened again only for information
 var info% := 0;
+'Open Settings dialog
 info% := Settings%();
 
-var ITI := ITIset * 1000;               'Convert seconds of ITI into ms
-var ITIvarVal := ITI * ITIvar% / 100.0; 'Amplitude of ITI variation, ms
-ITI -= ITIvarVal;                       'Give room for ITIvar
-ITIvarVal *= 2;                         'Double amplitude for neg and pos variation
-
-var noiseDur% := noiseDurSet% * 60;             'Convert mins to secs
-var noisePer% := 60;                            'Period of noise pattern repetition, s
-var noiseLoop% := noiseDur% / noisePer%;        'Num of noise periods in noiseDur
-var ITIloop% := ITI / (noisePer% * 1000);       'Num of noise periods in ITI
-var varLoop% := ITIvarVal / (noisePer% * 1000); 'Num of noise periods in ITI variation
+'Set technical variables
+var ITI, ITIvarVal;     
+var noiseDur%, noisePer%;
+var noiseLoop%, ITIloop%, varLoop%;
+SetVariables();
 
 'Delete existing waves in memory
 PlayWaveDelete();
-
 'Generate wave channels for noise, prepulse and pulse
-makeWaves();
+MakeWaves();
 
-'Write output sequence file
+'Write output sequencer file
 WriteSequence%();
 
 'Create new file for data recording
-recDataHandle% := FileNew(0);
+var recDataHandle% := FileNew(0);
 FrontView(recDataHandle%);
 
 'Set experiment control toolbar
 DoToolbar();  
+
+'Calculate and initialize variables
+proc SetVariables()
+
+ITI := ITIset * 1000;                   'Convert seconds of ITI into ms
+ITIvarVal := ITI * ITIvar% / 100.0;     'Amplitude of ITI variation, ms
+ITI -= ITIvarVal;                       'Give room for ITIvar
+ITIvarVal *= 2;                         'Double amplitude for neg and pos variation nnnnn
+
+noiseDur% := noiseDurSet% * 60;             'Convert mins to secs
+noisePer% := 60;                            'Period of noise pattern repetition, s
+noiseLoop% := noiseDur% / noisePer%;        'Num of noise periods in noiseDur
+ITIloop% := ITI / (noisePer% * 1000);       'Num of noise periods in ITI
+varLoop% := ITIvarVal / (noisePer% * 1000); 'Num of noise periods in ITI variation
+
+return;
+end;
+
 
 func DoToolbar() 
 
@@ -271,7 +276,7 @@ var memP%;   'Memory channel for pulse
 var Noise[0];   'Array for generated white noise
 
 'Create new file for virtual data
-virtDataHandle% := FileNew(7, 2, 5, 1, 10);   'upt = 5 us
+var virtDataHandle% := FileNew(7, 2, 5, 1, 10);   'upt = 5 us
 
 MemDeleteItem(memN%);
 MemDeleteItem(memR%);
@@ -283,9 +288,9 @@ memR% := Memchan(1, 0, 0.00002);
 memP% := Memchan(1, 0, 0.00002);
 
 'Convert sound volume in decibels to output voltage in mV
-noiseAmp := Db2Amp(noiseDb);
-prePulseAmp := Db2Amp(prePulseDb);
-pulseAmp := Db2Amp(pulseDb);
+var noiseAmp := Db2Amp(noiseDb);
+var prePulseAmp := Db2Amp(prePulseDb);
+var pulseAmp := Db2Amp(pulseDb);
 
 'Generate noise sequence for background noise
 Resize Noise[noisePer% / Binsize(memN%)];    
