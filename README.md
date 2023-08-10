@@ -1,6 +1,6 @@
 # Spike2 Script for Acoustic Startle Response (ASR) and Prepulse Inhibition (PPI) Protocols
 
-# Discription
+## Discription
 
 [Prepulse inhibition](https://en.wikipedia.org/wiki/Prepulse_inhibition) (PPI) of acoustic startle response (ASR) is 
 a neurological phenomenon in which a weaker audial prestimulus inhibits startle reaction of an organism 
@@ -32,11 +32,11 @@ Other neurophysiological articles using this script:
 https://doi.org/10.3390/biomedicines11010222  
 https://doi.org/10.3390/biom12101484
 
-# Interface and parameters
+## Interface and parameters
 
 ![Interface of the Settings](https://www.mdpi.com/mps/mps-06-00057/article_deploy/html/images/mps-06-00057-g003.png)
 
-# Hardware
+## Hardware
 
 Components of the setup equipment necessary for the procedure:  
 - **CED Power1401** data acquisition and control interface controlled with **Spike2** software
@@ -46,7 +46,7 @@ Components of the setup equipment necessary for the procedure:
   
 ![Block diagram of the ASR system components](https://www.mdpi.com/mps/mps-06-00057/article_deploy/html/images/mps-06-00057-g001.png)
 
-# Volume calibration
+## Volume calibration
 
 Data acquisition and control interface's output is electrical current of a range of voltage (usually ±5V). 
 However, real sound level depends on specific hardware, including sound amplifier settings, loudspeakers, and cage acoustics. 
@@ -94,8 +94,15 @@ return amplitude;
 end;
 ```
 
-# Future development
+## Future development
 
 Features that could be added to this script:
 - Pure tone stimuli of customizable frequency
 - Different number of signals in each block of stimuli
+
+## Credits
+
+This software was developed as part of my research work in the Laboratory of Neurobiology and Molecular Pharmacology of the Institute of Translational Biomedicine of St Petersburg University under the scientific supervision of Dr. Anna B. Volnova <a href="https://orcid.org/0000-0003-0724-887X"><img alt="ORCID logo" src="https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png" width="16" height="16" /></a>
+
+This work was supported by the Russian Science Foundation grant number 21-75-20069.
+
